@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Top Chef Season 22 ELO Calculator</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        h1, h2 {
+            color: #ff6b00;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        button {
+            background-color: #ff6b00;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #e05e00;
+        }
+        input, select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .contestant-card {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            background-color: white;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.05);
+        }
+        .contestant-card h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .eliminated {
+            background-color: #ffeeee;
+        }
+        .winner {
+            background-color: #eeffee;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        .episode-container {
+            margin-top: 20px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Top Chef Season 22 ELO Calculator</h1>
+    
+    <div class="container">
+        <h2>Contestant Management</h2>
+        <div>
+            <input type="text" id="contestantName" placeholder="Contestant Name">
+            <button onclick="addContestant()">Add Contestant</button>
+        </div>
+        
+        <h3>Current Contestants</h3>
+        <div id="contestantList" class="grid"></div>
+    </div>
+    
+    <div class="container">
+        <h2>Weekly Challenge Results</h2>
+        
+        <div>
+            <h3>Episode Information</h3>
+            <input type="number" id="episodeNumber" placeholder="Episode Number" min="1">
+        </div>
+        
+        <div>
+            <h3>Quickfire Challenge</h3>
+            <select id="quickfireWinner"></select>
+            <button onclick="recordQuickfire()">Record Quickfire Win</button>
+        </div>
+        
+        <div>
+            <h3>Elimination Challenge</h3>
+            <select id="eliminationWinner"></select>
+            <button onclick="recordEliminationWin()">Record Win</button>
+            
+            <select id="topContestants" multiple></select>
+            <button onclick="recordTopPlacement()">Record Top Placement</button>
+            
+            <select id="bottomContestants" multiple></select>
+            <button onclick="recordBottomPlacement()">Record Bottom Placement</button>
+            
+            <select id="eliminatedContestant"></select>
+            <button onclick="eliminateContestant()">Eliminate Contestant</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>ELO Leaderboard</h2>
+        <button onclick="sortContestants()">Sort by ELO</button>
+        <table id="leaderboard">
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Contestant</th>
+                    <th>ELO Rating</th>
+                    <th>Status</th>
+                    <th>Quickfires</th>
+                    <th>Wins</th>
+                    <th>Tops</th>
+                    <th>Bottoms</th>
+                </tr>
+            </thead>
+            <tbody id="leaderboardBody"></tbody>
+        </table>
+    </div>
+    
+    <div class="container">
+        <h2>Episode History</h2>
+        <div id="episodeHistory"></div>
+    </div>
+    
+    <script>
+        // Constants
+        const STARTING_ELO = 1500;
+        const K_FACTOR = 32;
+        const QUICKFIRE_WEIGHT = 0.7;
+        const ELIMINATION_WEIGHT = 1.0;
+        const TOP_WEIGHT = 0.5;
+        const BOTTOM_WEIGHT = -0.5;
+        
+        // State
+        let contestants = [];
+        let episodes = [];
+        
+        // Initialize or load from localStorage
+        function init() {
+            if (localStorage.getItem('topChefContestants')) {
+                contestants = JSON.parse(localStorage.getItem('topChefContestants'));
+            }
+            
+            if (localStorage.getItem('topChefEpisodes')) {
+                episodes = JSON.parse(localStorage.getItem('topChefEpisodes'));
+            }
+            
+            updateContestantList();
+            updateDropdowns();
+            updateLeaderboard();
+            updateEpisodeHistory();
+        }
+        
+        // Save state to localStorage
+        function saveState() {
+            localStorage.setItem('topChefContestants', JSON.stringify(contestants));
+            localStorage.setItem('topChefEpisodes', JSON.stringify(episodes));
+        }
+        
+        // Add a new contestant
+        function addContestant() {
+            const nameInput = document.getElementById('contestantName');
+            const name = nameInput.value.trim();
+            
+            if (name) {
+                // Check for duplicates
+                if (contestants.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+                    alert(`${name} is already in the competition!`);
+                    return;
+                }
+                
+                contestants.push({
+                    name: name,
+                    elo: STARTING_ELO,
+                    eliminated: false,
+                    quickfireWins: 0,
+                    eliminationWins: 0,
+                    topPlacements: 0,
+                    bottomPlacements: 0,
+                    eloHistory: [STARTING_ELO]
+                });
+                
+                nameInput.value = '';
+                
+                updateContestantList();
+                updateDropdowns();
+                updateLeaderboard();
+                saveState();
+            }
+        }
+        
+        // Update contestant display
+        function updateContestantList() {
+            const container = document.getElementById('contestantList');
+            container.innerHTML = '';
+            
+            contestants.forEach(contestant => {
+                const card = document.createElement('div');
+                card.className = `contestant-card ${contestant.eliminated ? 'eliminated' : ''}`;
+                
+                let statusText = contestant.eliminated ? 'Eliminated' : 'Active';
+                
+                card.innerHTML = `
+                    <h3>${contestant.name}</h3>
+                    <div>ELO Rating: <strong>${Math.round(contestant.elo)}</strong></div>
+                    <div>Status: <strong>${statusText}</strong></div>
+                    <div class="stats">
+                        <span>QF Wins: ${contestant.quickfireWins}</span>
+                        <span>Wins: ${contestant.eliminationWins}</span>
+                        <span>Tops: ${contestant.topPlacements}</span>
+                        <span>Bottoms: ${contestant.bottomPlacements}</span>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+        
+        // Update all dropdown menus
+        function updateDropdowns() {
+            const dropdowns = [
+                'quickfireWinner', 
+                'eliminationWinner', 
+                'eliminatedContestant'
+            ];
+            
+            const multiSelects = [
+                'topContestants',
+                'bottomContestants'
+            ];
+            
+            // Single select dropdowns (showing only active contestants)
+            dropdowns.forEach(id => {
+                const dropdown = document.getElementById(id);
+                dropdown.innerHTML = '<option value="">Select Contestant</option>';
+                
+                const activeContestants = contestants.filter(c => !c.eliminated);
+                activeContestants.forEach(contestant => {
+                    const option = document.createElement('option');
+                    option.value = contestant.name;
+                    option.textContent = contestant.name;
+                    dropdown.appendChild(option);
+                });
+            });
+            
+            // Multi-select dropdowns (showing only active contestants)
+            multiSelects.forEach(id => {
+                const select = document.getElementById(id);
+                select.innerHTML = '';
+                
+                const activeContestants = contestants.filter(c => !c.eliminated);
+                activeContestants.forEach(contestant => {
+                    const option = document.createElement('option');
+                    option.value = contestant.name;
+                    option.textContent = contestant.name;
+                    select.appendChild(option);
+                });
+            });
+        }
+        
+        // Update leaderboard
+        function updateLeaderboard() {
+            const tbody = document.getElementById('leaderboardBody');
+            tbody.innerHTML = '';
+            
+            // Sort contestants by ELO (highest first)
+            const sortedContestants = [...contestants].sort((a, b) => b.elo - a.elo);
+            
+            sortedContestants.forEach((contestant, index) => {
+                const row = document.createElement('tr');
+                if (contestant.eliminated) {
+                    row.className = 'eliminated';
+                }
+                
+                let statusText = contestant.eliminated ? 'Eliminated' : 'Active';
+                
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${contestant.name}</td>
+                    <td>${Math.round(contestant.elo)}</td>
+                    <td>${statusText}</td>
+                    <td>${contestant.quickfireWins}</td>
+                    <td>${contestant.eliminationWins}</td>
+                    <td>${contestant.topPlacements}</td>
+                    <td>${contestant.bottomPlacements}</td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        }
+        
+        // Calculate new ELO based on win/loss
+        function calculateElo(winnerElo, loserElo, weight = 1.0) {
+            // Calculate expected scores
+            const expectedWinner = 1 / (1 + Math.pow(10, (loserElo - winnerElo) / 400));
+            const expectedLoser = 1 / (1 + Math.pow(10, (winnerElo - loserElo) / 400));
+            
+            // Calculate new ratings
+            const newWinnerElo = winnerElo + K_FACTOR * weight * (1 - expectedWinner);
+            const newLoserElo = loserElo + K_FACTOR * weight * (0 - expectedLoser);
+            
+            return {
+                winner: newWinnerElo,
+                loser: newLoserElo
+            };
+        }
+        
+        // Record a quickfire win
+        function recordQuickfire() {
+            const winnerSelect = document.getElementById('quickfireWinner');
+            const winnerName = winnerSelect.value;
+            const episodeNumber = parseInt(document.getElementById('episodeNumber').value);
+            
+            if (!winnerName) {
+                alert('Please select a quickfire winner.');
+                return;
+            }
+            
+            if (!episodeNumber || episodeNumber < 1) {
+                alert('Please enter a valid episode number.');
+                return;
+            }
+            
+            const winner = contestants.find(c => c.name === winnerName);
+            
+            if (winner) {
+                // Record the win
+                winner.quickfireWins++;
+                
+                // Update all contestants' ELO
+                const activeContestants = contestants.filter(c => !c.eliminated && c.name !== winnerName);
+                
+                activeContestants.forEach(contestant => {
+                    const eloChange = calculateElo(winner.elo, contestant.elo, QUICKFIRE_WEIGHT);
+                    winner.elo = eloChange.winner;
+                    contestant.elo = eloChange.loser;
+                });
+                
+                // Record the episode event
+                recordEpisodeEvent(episodeNumber, {
+                    type: 'quickfire',
+                    winner: winnerName
+                });
+                
+                // Record ELO history
+                recordEloHistory();
+                
+                // Update UI
+                updateContestantList();
+                updateLeaderboard();
+                updateEpisodeHistory();
+                saveState();
+                
+                // Reset selection
+                winnerSelect.value = '';
+            }
+        }
+        
+        // Record an elimination challenge win
+        function recordEliminationWin() {
+            const winnerSelect = document.getElementById('eliminationWinner');
+            const winnerName = winnerSelect.value;
+            const episodeNumber = parseInt(document.getElementById('episodeNumber').value);
+            
+            if (!winnerName) {
+                alert('Please select an elimination challenge winner.');
+                return;
+            }
+            
+            if (!episodeNumber || episodeNumber < 1) {
+                alert('Please enter a valid episode number.');
+                return;
+            }
+            
+            const winner = contestants.find(c => c.name === winnerName);
+            
+            if (winner) {
+                // Record the win
+                winner.eliminationWins++;
+                
+                // Update all contestants' ELO
+                const activeContestants = contestants.filter(c => !c.eliminated && c.name !== winnerName);
+                
+                activeContestants.forEach(contestant => {
+                    const eloChange = calculateElo(winner.elo, contestant.elo, ELIMINATION_WEIGHT);
+                    winner.elo = eloChange.winner;
+                    contestant.elo = eloChange.loser;
+                });
+                
+                // Record the episode event
+                recordEpisodeEvent(episodeNumber, {
+                    type: 'elimination_win',
+                    winner: winnerName
+                });
+                
+                // Record ELO history
+                recordEloHistory();
+                
+                // Update UI
+                updateContestantList();
+                updateLeaderboard();
+                updateEpisodeHistory();
+                saveState();
+                
+                // Reset selection
+                winnerSelect.value = '';
+            }
+        }
+        
+        // Record top placements
+        function recordTopPlacement() {
+            const topSelect = document.getElementById('topContestants');
+            const topNames = Array.from(topSelect.selectedOptions).map(option => option.value);
+            const episodeNumber = parseInt(document.getElementById('episodeNumber').value);
+            
+            if (topNames.length === 0) {
+                alert('Please select at least one contestant for top placement.');
+                return;
+            }
+            
+            if (!episodeNumber || episodeNumber < 1) {
+                alert('Please enter a valid episode number.');
+                return;
+            }
+            
+            // Record top placements
+            topNames.forEach(name => {
+                const contestant = contestants.find(c => c.name === name);
+                if (contestant) {
+                    contestant.topPlacements++;
+                    
+                    // Adjust ELO for being on top (bonus against all non-top contestants)
+                    const nonTopContestants = contestants.filter(c => 
+                        !c.eliminated && !topNames.includes(c.name));
+                    
+                    nonTopContestants.forEach(other => {
+                        const eloChange = calculateElo(contestant.elo, other.elo, TOP_WEIGHT);
+                        contestant.elo = eloChange.winner;
+                        other.elo = eloChange.loser;
+                    });
+                }
+            });
+            
+            // Record the episode event
+            recordEpisodeEvent(episodeNumber, {
+                type: 'top_placement',
+                contestants: topNames
+            });
+            
+            // Record ELO history
+            recordEloHistory();
+            
+            // Update UI
+            updateContestantList();
+            updateLeaderboard();
+            updateEpisodeHistory();
+            saveState();
+            
+            // Reset selection
+            topSelect.selectedIndex = -1;
+        }
+        
+        // Record bottom placements
+        function recordBottomPlacement() {
+            const bottomSelect = document.getElementById('bottomContestants');
+            const bottomNames = Array.from(bottomSelect.selectedOptions).map(option => option.value);
+            const episodeNumber = parseInt(document.getElementById('episodeNumber').value);
+            
+            if (bottomNames.length === 0) {
+                alert('Please select at least one contestant for bottom placement.');
+                return;
+            }
+            
+            if (!episodeNumber || episodeNumber < 1) {
+                alert('Please enter a valid episode number.');
+                return;
+            }
+            
+            // Record bottom placements
+            bottomNames.forEach(name => {
+                const contestant = contestants.find(c => c.name === name);
+                if (contestant) {
+                    contestant.bottomPlacements++;
+                    
+                    // Adjust ELO for being on bottom (penalty against all non-bottom contestants)
+                    const nonBottomContestants = contestants.filter(c => 
+                        !c.eliminated && !bottomNames.includes(c.name));
+                    
+                    nonBottomContestants.forEach(other => {
+                        const eloChange = calculateElo(other.elo, contestant.elo, Math.abs(BOTTOM_WEIGHT));
+                        other.elo = eloChange.winner;
+                        contestant.elo = eloChange.loser;
+                    });
+                }
+            });
+            
+            // Record the episode event
+            recordEpisodeEvent(episodeNumber, {
+                type: 'bottom_placement',
+                contestants: bottomNames
+            });
+            
+            // Record ELO history
+            recordEloHistory();
+            
+            // Update UI
+            updateContestantList();
+            updateLeaderboard();
+            updateEpisodeHistory();
+            saveState();
+            
+            // Reset selection
+            bottomSelect.selectedIndex = -1;
+        }
+        
+        // Eliminate a contestant
+        function eliminateContestant() {
+            const eliminatedSelect = document.getElementById('eliminatedContestant');
+            const eliminatedName = eliminatedSelect.value;
+            const episodeNumber = parseInt(document.getElementById('episodeNumber').value);
+            
+            if (!eliminatedName) {
+                alert('Please select a contestant to eliminate.');
+                return;
+            }
+            
+            if (!episodeNumber || episodeNumber < 1) {
+                alert('Please enter a valid episode number.');
+                return;
+            }
+            
+            const contestant = contestants.find(c => c.name === eliminatedName);
+            
+            if (contestant) {
+                // Mark as eliminated
+                contestant.eliminated = true;
+                
+                // Record the episode event
+                recordEpisodeEvent(episodeNumber, {
+                    type: 'elimination',
+                    contestant: eliminatedName
+                });
+                
+                // Update UI
+                updateContestantList();
+                updateDropdowns();
+                updateLeaderboard();
+                updateEpisodeHistory();
+                saveState();
+                
+                // Reset selection
+                eliminatedSelect.value = '';
+            }
+        }
+        
+        // Record an episode event
+        function recordEpisodeEvent(episodeNumber, event) {
+            let episode = episodes.find(e => e.number === episodeNumber);
+            
+            if (!episode) {
+                episode = {
+                    number: episodeNumber,
+                    events: []
+                };
+                episodes.push(episode);
+                // Sort episodes by number
+                episodes.sort((a, b) => a.number - b.number);
+            }
+            
+            episode.events.push(event);
+        }
+        
+        // Record ELO history for all contestants
+        function recordEloHistory() {
+            contestants.forEach(contestant => {
+                contestant.eloHistory.push(contestant.elo);
+            });
+        }
+        
+        // Update episode history display
+        function updateEpisodeHistory() {
+            const container = document.getElementById('episodeHistory');
+            container.innerHTML = '';
+            
+            if (episodes.length === 0) {
+                container.innerHTML = '<p>No episodes recorded yet.</p>';
+                return;
+            }
+            
+            episodes.forEach(episode => {
+                const episodeDiv = document.createElement('div');
+                episodeDiv.className = 'episode-container';
+                
+                let html = `<h3>Episode ${episode.number}</h3>`;
+                
+                if (episode.events.length === 0) {
+                    html += '<p>No events recorded for this episode.</p>';
+                } else {
+                    html += '<ul>';
+                    
+                    episode.events.forEach(event => {
+                        switch(event.type) {
+                            case 'quickfire':
+                                html += `<li><strong>Quickfire Winner:</strong> ${event.winner}</li>`;
+                                break;
+                            case 'elimination_win':
+                                html += `<li><strong>Elimination Challenge Winner:</strong> ${event.winner}</li>`;
+                                break;
+                            case 'top_placement':
+                                html += `<li><strong>Top Chefs:</strong> ${event.contestants.join(', ')}</li>`;
+                                break;
+                            case 'bottom_placement':
+                                html += `<li><strong>Bottom Chefs:</strong> ${event.contestants.join(', ')}</li>`;
+                                break;
+                            case 'elimination':
+                                html += `<li><strong>Eliminated:</strong> ${event.contestant}</li>`;
+                                break;
+                        }
+                    });
+                    
+                    html += '</ul>';
+                }
+                
+                episodeDiv.innerHTML = html;
+                container.appendChild(episodeDiv);
+            });
+        }
+        
+        // Sort contestants by ELO
+        function sortContestants() {
+            updateLeaderboard();
+        }
+        
+        // Reset all data
+        function resetData() {
+            if (confirm('Are you sure you want to reset all data? This cannot be undone.')) {
+                contestants = [];
+                episodes = [];
+                saveState();
+                updateContestantList();
+                updateDropdowns();
+                updateLeaderboard();
+                updateEpisodeHistory();
+            }
+        }
+        
+        // Initialize on page load
+        window.onload = init;
+    </script>
+    
+    <div class="container">
+        <h2>Settings</h2>
+        <button onclick="resetData()" style="background-color: #d9534f;">Reset All Data</button>
+    </div>
+</body>
+</html>
