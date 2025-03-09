@@ -93,75 +93,125 @@
             border-top: 1px solid #ddd;
             padding-top: 20px;
         }
+        #loginForm {
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .admin-panel {
+            display: none;
+        }
+        .hidden {
+            display: none;
+        }
+        .admin-header {
+            background-color: #ffe0cc;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <h1>Top Chef Season 22 ELO Calculator</h1>
     
-    <div class="container">
-        <h2>Contestant Management</h2>
+    <!-- Login Form -->
+    <div id="loginForm" class="container">
+        <h2>Admin Login</h2>
+        <p>Log in to manage contestants and enter data.</p>
         <div>
-            <input type="text" id="contestantName" placeholder="Contestant Name">
-            <button onclick="addContestant()">Add Contestant</button>
+            <input type="password" id="adminPassword" placeholder="Password">
+            <button onclick="login()">Login</button>
         </div>
-        
-        <h3>Current Contestants</h3>
-        <div id="contestantList" class="grid"></div>
+        <p id="loginMessage" style="color: red;"></p>
     </div>
     
-    <div class="container">
-        <h2>Weekly Challenge Results</h2>
-        
-        <div>
-            <h3>Episode Information</h3>
-            <input type="number" id="episodeNumber" placeholder="Episode Number" min="1">
+    <!-- Admin Controls (hidden by default) -->
+    <div id="adminControls" class="admin-panel">
+        <div class="admin-header">
+            Admin Mode Active - <button onclick="logout()">Logout</button>
         </div>
         
-        <div>
-            <h3>Quickfire Challenge</h3>
-            <select id="quickfireWinner"></select>
-            <button onclick="recordQuickfire()">Record Quickfire Win</button>
+        <div class="container">
+            <h2>Contestant Management</h2>
+            <div>
+                <input type="text" id="contestantName" placeholder="Contestant Name">
+                <button onclick="addContestant()">Add Contestant</button>
+            </div>
+            
+            <h3>Current Contestants</h3>
+            <div id="contestantList" class="grid"></div>
         </div>
         
-        <div>
-            <h3>Elimination Challenge</h3>
-            <select id="eliminationWinner"></select>
-            <button onclick="recordEliminationWin()">Record Win</button>
+        <div class="container">
+            <h2>Weekly Challenge Results</h2>
             
-            <select id="topContestants" multiple></select>
-            <button onclick="recordTopPlacement()">Record Top Placement</button>
+            <div>
+                <h3>Episode Information</h3>
+                <input type="number" id="episodeNumber" placeholder="Episode Number" min="1">
+            </div>
             
-            <select id="bottomContestants" multiple></select>
-            <button onclick="recordBottomPlacement()">Record Bottom Placement</button>
+            <div>
+                <h3>Quickfire Challenge</h3>
+                <select id="quickfireWinner"></select>
+                <button onclick="recordQuickfire()">Record Quickfire Win</button>
+            </div>
             
-            <select id="eliminatedContestant"></select>
-            <button onclick="eliminateContestant()">Eliminate Contestant</button>
+            <div>
+                <h3>Elimination Challenge</h3>
+                <select id="eliminationWinner"></select>
+                <button onclick="recordEliminationWin()">Record Win</button>
+                
+                <select id="topContestants" multiple></select>
+                <button onclick="recordTopPlacement()">Record Top Placement</button>
+                
+                <select id="bottomContestants" multiple></select>
+                <button onclick="recordBottomPlacement()">Record Bottom Placement</button>
+                
+                <select id="eliminatedContestant"></select>
+                <button onclick="eliminateContestant()">Eliminate Contestant</button>
+            </div>
+        </div>
+        
+        <div class="container">
+            <h2>Settings</h2>
+            <button onclick="resetData()" style="background-color: #d9534f;">Reset All Data</button>
+            <button onclick="exportData()">Export Data (JSON)</button>
+            <input type="file" id="importFile" accept=".json" style="display: none;">
+            <button onclick="document.getElementById('importFile').click()">Import Data</button>
         </div>
     </div>
     
-    <div class="container">
-        <h2>ELO Leaderboard</h2>
-        <button onclick="sortContestants()">Sort by ELO</button>
-        <table id="leaderboard">
-            <thead>
-                <tr>
-                    <th>Rank</th>
-                    <th>Contestant</th>
-                    <th>ELO Rating</th>
-                    <th>Status</th>
-                    <th>Quickfires</th>
-                    <th>Wins</th>
-                    <th>Tops</th>
-                    <th>Bottoms</th>
-                </tr>
-            </thead>
-            <tbody id="leaderboardBody"></tbody>
-        </table>
-    </div>
-    
-    <div class="container">
-        <h2>Episode History</h2>
-        <div id="episodeHistory"></div>
+    <!-- Public View (always visible) -->
+    <div id="publicView">
+        <div class="container">
+            <h2>ELO Leaderboard</h2>
+            <button onclick="sortContestants()">Sort by ELO</button>
+            <table id="leaderboard">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Contestant</th>
+                        <th>ELO Rating</th>
+                        <th>Status</th>
+                        <th>Quickfires</th>
+                        <th>Wins</th>
+                        <th>Tops</th>
+                        <th>Bottoms</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboardBody"></tbody>
+            </table>
+        </div>
+        
+        <div class="container">
+            <h2>Episode History</h2>
+            <div id="episodeHistory"></div>
+        </div>
     </div>
     
     <script>
@@ -173,9 +223,14 @@
         const TOP_WEIGHT = 0.5;
         const BOTTOM_WEIGHT = -0.5;
         
+        // Set your password here - change this to something secure
+        // This is not a secure implementation, but works for basic access control
+        const ADMIN_PASSWORD = "topsecret";
+        
         // State
         let contestants = [];
         let episodes = [];
+        let isAdmin = false;
         
         // Initialize or load from localStorage
         function init() {
@@ -187,10 +242,57 @@
                 episodes = JSON.parse(localStorage.getItem('topChefEpisodes'));
             }
             
+            // Check if already logged in
+            checkLoginStatus();
+            
             updateContestantList();
             updateDropdowns();
             updateLeaderboard();
             updateEpisodeHistory();
+            
+            // Setup import file handler
+            document.getElementById('importFile').addEventListener('change', handleFileImport);
+        }
+        
+        // Check if user is logged in
+        function checkLoginStatus() {
+            const adminToken = localStorage.getItem('topChefAdminToken');
+            if (adminToken === ADMIN_PASSWORD) {
+                isAdmin = true;
+                showAdminControls();
+            }
+        }
+        
+        // Admin login function
+        function login() {
+            const password = document.getElementById('adminPassword').value;
+            if (password === ADMIN_PASSWORD) {
+                localStorage.setItem('topChefAdminToken', password);
+                isAdmin = true;
+                showAdminControls();
+                document.getElementById('loginMessage').textContent = '';
+            } else {
+                document.getElementById('loginMessage').textContent = 'Incorrect password';
+            }
+        }
+        
+        // Logout function
+        function logout() {
+            localStorage.removeItem('topChefAdminToken');
+            isAdmin = false;
+            hideAdminControls();
+        }
+        
+        // Show admin controls
+        function showAdminControls() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('adminControls').style.display = 'block';
+        }
+        
+        // Hide admin controls
+        function hideAdminControls() {
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('adminControls').style.display = 'none';
         }
         
         // Save state to localStorage
@@ -201,6 +303,8 @@
         
         // Add a new contestant
         function addContestant() {
+            if (!isAdmin) return;
+            
             const nameInput = document.getElementById('contestantName');
             const name = nameInput.value.trim();
             
@@ -349,6 +453,8 @@
         
         // Record a quickfire win
         function recordQuickfire() {
+            if (!isAdmin) return;
+            
             const winnerSelect = document.getElementById('quickfireWinner');
             const winnerName = winnerSelect.value;
             const episodeNumber = parseInt(document.getElementById('episodeNumber').value);
@@ -400,6 +506,8 @@
         
         // Record an elimination challenge win
         function recordEliminationWin() {
+            if (!isAdmin) return;
+            
             const winnerSelect = document.getElementById('eliminationWinner');
             const winnerName = winnerSelect.value;
             const episodeNumber = parseInt(document.getElementById('episodeNumber').value);
@@ -451,6 +559,8 @@
         
         // Record top placements
         function recordTopPlacement() {
+            if (!isAdmin) return;
+            
             const topSelect = document.getElementById('topContestants');
             const topNames = Array.from(topSelect.selectedOptions).map(option => option.value);
             const episodeNumber = parseInt(document.getElementById('episodeNumber').value);
@@ -504,6 +614,8 @@
         
         // Record bottom placements
         function recordBottomPlacement() {
+            if (!isAdmin) return;
+            
             const bottomSelect = document.getElementById('bottomContestants');
             const bottomNames = Array.from(bottomSelect.selectedOptions).map(option => option.value);
             const episodeNumber = parseInt(document.getElementById('episodeNumber').value);
@@ -557,6 +669,8 @@
         
         // Eliminate a contestant
         function eliminateContestant() {
+            if (!isAdmin) return;
+            
             const eliminatedSelect = document.getElementById('eliminatedContestant');
             const eliminatedName = eliminatedSelect.value;
             const episodeNumber = parseInt(document.getElementById('episodeNumber').value);
@@ -675,6 +789,8 @@
         
         // Reset all data
         function resetData() {
+            if (!isAdmin) return;
+            
             if (confirm('Are you sure you want to reset all data? This cannot be undone.')) {
                 contestants = [];
                 episodes = [];
@@ -686,13 +802,64 @@
             }
         }
         
+        // Export data as JSON
+        function exportData() {
+            if (!isAdmin) return;
+            
+            const data = {
+                contestants: contestants,
+                episodes: episodes
+            };
+            
+            const dataStr = JSON.stringify(data, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportFileDefaultName = 'top_chef_data.json';
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        }
+        
+        // Import data from JSON file
+        function handleFileImport(event) {
+            if (!isAdmin) return;
+            
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    if (data.contestants && data.episodes) {
+                        if (confirm('This will replace all current data. Continue?')) {
+                            contestants = data.contestants;
+                            episodes = data.episodes;
+                            saveState();
+                            updateContestantList();
+                            updateDropdowns();
+                            updateLeaderboard();
+                            updateEpisodeHistory();
+                            alert('Data imported successfully!');
+                        }
+                    } else {
+                        alert('Invalid data format');
+                    }
+                } catch (error) {
+                    alert('Error parsing file: ' + error);
+                }
+                
+                // Reset the file input
+                document.getElementById('importFile').value = '';
+            };
+            reader.readAsText(file);
+        }
+        
         // Initialize on page load
         window.onload = init;
     </script>
-    
-    <div class="container">
-        <h2>Settings</h2>
-        <button onclick="resetData()" style="background-color: #d9534f;">Reset All Data</button>
-    </div>
 </body>
 </html>
